@@ -1,0 +1,428 @@
+---
+title: "Ashour_34889973_Assignment4_Rmd.Rmd"
+author: "Layla Ashour"
+date: "2024-05-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+```
+
+## Libraries
+
+You can also embed plots, for example:
+
+```{r }
+library(rvest)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(httr)
+library(jsonlite)
+library(lubridate)
+library(knitr)
+library(stringr)
+library(tidytext)
+library(stopwords)
+library(hunspell)
+```
+
+# Task B1
+
+saving the URL into a varible then reading that varible 
+```{r }
+url <- "https://en.wikipedia.org/wiki/ICC_Men%27s_T20I_Team_Rankings"
+
+content <- read_html(url)
+```
+# Task B1 Web Scraping
+after inspecting elements on the webpage, I was able to find the table class name, but I was getting errors when trying to use the class name,Im assuming because I didnt include the parents div but that wouldve been a lot of code.
+
+so instead I extracted all the tables from the webpage into a tables varible, then printed each one to see which one was the one I wanted.
+
+```{r }
+tables <- content %>% html_table(fill = TRUE)
+
+table_one <- tables[[1]]
+table_two <-tables[[2]]
+table_three <-tables[[3]]
+table_seven <-tables[[7]]
+```
+# Task B1 Cleaning & Wrangling 
+
+Table 2, had a lot of white space which made it difficult to see the whole row without scrolling.
+the headers were in the second row instead of first, have to remove that.
+
+I attemted to remove the white space but it wasnt working then i realised it was caused from the top header which had a lot of irrelavent css code, so removed that instead.
+
+
+firstly converted to. dataframe as its easier to work with that.
+
+data was pretty clean no further cleaning was required.
+
+after all that i realised i had the wrong table and went and found the right table.
+just needed to change the date format 
+
+after converting to the required date format, some values were NA as they were still going, chnaged all the Na values to present time.
+
+last row was irrelevant so had to remove 
+
+```{r }
+df <- as.data.frame(table_seven) 
+
+
+summary(df)
+null_sum <- colSums(is.na(df))
+print(null_sum)
+df$Start <- as.Date(df$Start, format = "%d %b %y")
+df$End <- as.Date(df$End, format = "%d %b %y")
+
+df$End[is.na(df$End)] <- Sys.Date()
+df$Start[is.na(df$Start)] <- Sys.Date()
+
+df$Duration <- gsub("\\D", "", df$Duration)
+df$Duration <- as.numeric(df$Duration)
+
+df <- df[1:(nrow(df)-1), ]
+
+```
+# Task B1 Analysis
+
+
+```{r }
+
+summary_data <- df %>%
+  group_by(Country) %>%
+  summarise(
+    Earliest_start = min(Start),
+    Latst_end = min(End),
+    Average_duration = mean(Duration)
+  )
+summary_data$Average_duration <- round(summary_data$Average_duration, 2)
+
+summary_data_sorted <- summary_data[order(-summary_data$Average_duration), ]
+
+print(summary_data_sorted)
+```
+
+```{r }
+```
+# Task B2 Scraping
+
+
+```{r }
+B2_Url <- "https://en.wikipedia.org/wiki/COVID-19_pandemic_deaths"
+B2_content <- read_html(B2_Url)
+
+B2_tables <- html_table(B2_content, fill = TRUE)
+
+B2_table <- B2_tables[[7]]
+
+```
+# Task B2 Wrangling & Cleaning
+
+had to get rid of first column, it was the flag column, but had Na values.
+
+removed all the non numeric values in the columns for each month as some had commas.
+
+```{r }
+df_B2 <- as.data.frame(B2_table)
+df_B2 <- subset(df_B2, select = -1)
+
+coloumns_convert <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+df_B2[coloumns_convert] <- lapply(df_B2[coloumns_convert], function(x) gsub(",", "", x))
+```
+
+# Task B2 Analysis
+
+Converted all the columns to Long for the analysis, except for the Location
+grouped by location then got the total number of deaths for each country.
+sorted in desc order to get the countries with the most deaths
+selected the top 11 to then remove the world count as that's not relevant.
+
+```{r }
+df_long <- df_B2 %>%
+  pivot_longer(cols = -Location, names_to = "Month", values_to = "Deaths")
+
+df_long$Deaths <- as.numeric(df_long$Deaths)
+total_deaths <- df_long %>%
+  group_by(Location) %>%
+  summarise(Total_Deaths = sum(Deaths, na.rm = TRUE))
+
+sorted_total_deaths <- total_deaths %>%
+  arrange(desc(Total_Deaths))
+
+Top_10_Countries <- sorted_total_deaths  %>%
+  head(11)
+Top_10_Countries <- Top_10_Countries[-1, ]
+
+```
+
+```{r }
+```
+
+# Task B2 Plot & Explanation
+This visual presents the total number of deaths from the ten countries with the highest death counts, arranged in descending order. The United States has the highest death toll, followed by Brazil and India. Further analysis is needed to understand why some countries experience higher death rates. Contributing factors might include non-compliance with COVID-19 guidelines and population size, as larger population can result in mor deaths. Additionally, if deaths were shown as percentages of the population, the ranking might differ, providing an alternative view of the pandemic’s impact.
+
+```{r }
+
+ggplot(Top_10_Countries, aes(x = reorder(Location, -Total_Deaths), y = Total_Deaths)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Total Deaths by Country ", x = "Country", y = "Total Deaths") +
+  scale_y_continuous(labels = scales::comma) 
+ 
+```
+
+````{r }
+```
+# Task C Exploratory Data Analysis using R
+
+Converting the user created date coloumn to then split up date and time, because some questions I only need the date.
+```{r }
+twitter_raw_data <- read_csv("Olympics_tweets.csv")
+
+twitter_raw_data$user_created_at <- dmy_hm(twitter_raw_data$user_created_at)
+twitter_raw_data$user_created_at_date <- as.Date(twitter_raw_data$user_created_at)
+```
+# Task C Exploratory Data Analysis using R
+## 1.1
+
+I selected the columns needed for the data analysis.
+I then created another column called year for the year.
+grouped by year, then counted the distinct user screen names.
+
+had to remove the last row as it was representing the Na values, which would ruin the graph.
+```{r }
+task_1_1_data <- twitter_raw_data %>%
+  select(id ,user_screen_name, user_created_at_date) %>%
+  mutate(year = year(user_created_at_date)) %>%
+  group_by(year) %>%
+  summarise(no = n_distinct(user_screen_name))
+
+task_1_1_data <- task_1_1_data[-17,]
+ 
+ggplot(task_1_1_data, aes( x = year , y = no))+
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Year", y = "Count", title = "Number of Accounts Created on Twitter each Year")
+```
+
+````{r }
+```
+# Task C Exploratory Data Analysis using R
+## 1.2
+
+```{r }
+task_1_2_data <- twitter_raw_data %>%
+  select(user_screen_name, user_created_at_date, user_followers) %>%
+  mutate(year = year(user_created_at_date)) %>%
+  filter( year > 2010)%>%
+  group_by(year) %>%
+  summarise(total_followers = sum(user_followers),no_users = n())%>%
+  mutate(average_followers = total_followers/no_users)
+
+ggplot(task_1_2_data, aes(x = year , y = average_followers))+
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Year", y = "Average followers", title = "Average Number of Followers per User Created After 2010, by Year")
+
+```
+
+````{r }
+```
+From these two graphs, its apparent that earlier accounts tended to have a higher average number of followers. However, the increasing number of accounts over time suggest that Twitter was less populated in its early years, resulting in users having fewer accounts to follow initially. As Twitter grew in popularity and more accounts were created, it became increasingly challenging to gain followers.
+In the first graph, the year 2020 experienced a significant increase in new accounts, second only to 2009. This surge could be attributed to the COVID-19 pandemic, which prompted more people to be online and led to the creation of Twitter accounts to stay updated on pandemic related news.
+````{r }
+```
+# Task C Exploratory Data Analysis using R
+## 1.4
+
+after using the filter to filter out na values, I counted user location.
+in the top 10 it had she/her as a location which was an odd value, I left as is because in the description of this task it says there are some odd values.
+
+otherwise i would of removed the she/her as a location as its not valid.
+
+```{r }
+task_1_4_data <- twitter_raw_data %>%
+  filter(!is.na(user_location)) %>%  
+  count(user_location, sort = TRUE)
+
+top_10_locations <- head(task_1_4_data, 10)%>%
+rename("Occurrences" = n)%>%
+rename("Location" = user_location)
+
+kable(top_10_locations, format = "markdown", col.names = c("Location", "Occurrences"))
+```
+
+```{r }
+tweets_associated <- sum(top_10_locations$Occurrences)
+
+cat("\nThe Number of Tweets Associated with the Top 10 Most Frequent Locations:\n")
+cat(tweets_associated)
+
+```
+
+````{r }
+```
+# Task C Exploratory Data Analysis using R
+## 2
+
+```{r }
+task_2_data <- twitter_raw_data %>%
+  select(id,user_created_at_date) %>%
+  group_by(user_created_at_date) %>%
+  count(user_created_at_date, name = "no_tweets") %>%
+  arrange(no_tweets)%>%
+  rename("date" = user_created_at_date)
+
+
+ggplot(task_2_data, aes(x = date, y = no_tweets)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Number of Tweets Posted on Different Dates",
+       x = "Date",
+       y = "Number of Tweets") +
+  theme_minimal()
+
+```
+```{r }
+lowest_number_tweets <-  task_2_data %>%
+  filter(no_tweets == min(no_tweets)) 
+  
+
+ggplot(lowest_number_tweets, aes(x = date, y = no_tweets)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Number of Tweets Posted on Different Dates",
+       x = "Date",
+       y = "Number of Tweets") +
+  theme_minimal()
+```
+
+
+```{r }
+```
+# Task C Exploratory Data Analysis using R
+## 2.2
+
+got the count of char from each tweet.
+created the bins for the bar charts, the Inf is for anything greater than 240.
+
+the include lowest ensures that the bin value is kept in the lowest bin, e.g. if the char is 80 is it would belong to the 80 bin instead of the next bin 120.
+
+couldnt fx the bins break
+```{r }
+text_lengths <-nchar(twitter_raw_data$text)
+bins_groups <- c(1, 40, 80, 120, 160, 200, 240, Inf)
+tweet_bins_groups <- cut(text_lengths, breaks = bins_groups, right = FALSE)
+
+tweet_counts <- table(tweet_bins_groups)
+
+barplot(tweet_counts, 
+        main = "Character Length Distribution of Tweets",
+        xlab = "Tweet Length", 
+        ylab = "Number of Tweets",
+        width = 1)
+```
+
+```{r }
+```
+# Task C Exploratory Data Analysis using R
+## 2.3
+
+
+extracted all the tweets with the @ which would mean it has a mention.
+
+then extracted all the usernames, and extracted the unique ones.
+
+printed them, using cat instead of print because it removed the "".
+
+```{r }
+tweets_contain_usernames <- grepl("@\\w+", twitter_raw_data$text)
+tweets_usernames_count <- sum(tweets_contain_usernames)
+
+usernames <- unlist(str_extract_all(twitter_raw_data$text, "@\\w+"))
+
+unique_usernames <- unique(usernames)
+total_count_mentions <- length(unique_usernames)
+
+
+cat("\nThe Number of Tweets with Mentions:  \n")
+cat(total_count_mentions)
+
+
+
+```
+
+```{r }
+tweets_with_multiple_usernames_count <- sum(sapply(twitter_raw_data$text, function(tweet) {
+  str_count(tweet, "@\\w+")
+}) >= 3)
+
+
+cat("\nThe Number of Tweets with 3 or more  Mentions:  \n")
+cat(tweets_with_multiple_usernames_count)
+```
+
+```{r }
+```
+
+# Task C Exploratory Data Analysis using R
+## 2.4
+convert to lowercase, for easier analysis.
+removing punctiotion so that its easier to split into words.
+
+using unset to split the text into words 
+
+using the stop word library, i was able to filter out the stop words.
+
+after printing the top 20 words, there were some non english words and some werent even words just letters, so using hunspell ill make sure the terms are in english only and then remove any terms with 1 char because thats not a term.
+
+I went back and put another filter to words_frequency which filters out the words that are only one char, because it will reduce the amount of time it'll take for the it to filter out the english terms in is_en_term.
+
+split up the output code so i dont have to wait for the filtering each time i want to see the output.
+
+```{r }
+twitter_raw_data$text <-tolower(twitter_raw_data$text) 
+twitter_raw_data$text <- str_replace_all(twitter_raw_data$text, "[[:punct:]]", " ") 
+
+term_frequencies <- twitter_raw_data %>%
+  unnest_tokens(word, text) %>%
+  count(word, sort = TRUE)
+
+stopwords_list <- stopwords::stopwords("en")
+
+
+words_frequencies <- term_frequencies %>%
+  filter(!word %in% stopwords_list)%>%
+  filter(nchar(word) > 1)
+
+is_en_term <- function(word) {
+  hunspell::hunspell_check(word, dict = hunspell::dictionary("en_AU"))
+}
+
+filterd_en_terms <- words_frequencies %>%
+  filter(sapply(word, is_en_term))%>%
+  rename("Frequency" = n)
+
+```
+
+```{r }
+
+top_20_words <- filterd_en_terms %>%
+  head(20)
+
+kable(top_20_words, caption = "The Top 20 Frequent Terms in Tweets", position = "top")
+
+```
+
+
